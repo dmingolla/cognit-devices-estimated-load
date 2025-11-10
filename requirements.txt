@@ -1,0 +1,4 @@
+PyYAML
+requests
+-e git+https://github.com/OpenNebula/one-aiops.git@b05fa36fcc424208360f0bd7cc756a162be17728#egg=pyoneai&subdirectory=sdk
+
