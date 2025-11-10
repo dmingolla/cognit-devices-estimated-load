@@ -1,0 +1,22 @@
+# Cognit Devices Estimated Load Daemon Configuration
+
+# Logging
+log_level: info
+
+# OpenNebula XML-RPC endpoint
+one_xmlrpc: http://<IP_OPENNEBULA_FRONTEND>:2633/RPC2
+
+# Database path (shared with cognit-frontend)
+db_path: <PATH_TO_DATABASE>
+db_cleanup_days: 30
+
+# OpenNebula MySQL database (for monitoring data)
+one_db_host: <IP_OPENNEBULA_DATABASE>
+one_db_port: 3306
+one_db_database: opennebula
+one_db_user: oneadmin
+one_db_password: <PASSWORD_OPENNEBULA_DATABASE>
+
+# OpenNebula API credentials (for OneFlow REST API)
+one_api_user: oneadmin
+one_api_password: <PASSWORD_OPENNEBULA_API>

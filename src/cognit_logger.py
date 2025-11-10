@@ -6,8 +6,8 @@ import os
 from pathlib import Path
 
 
-LOG_DIR = "/var/log/cognit-frontend"
-LOG_FILE = os.path.join(LOG_DIR, "cognit-frontend.log")
+LOG_DIR = "/var/log/cognit-devices-estimated-load"
+LOG_FILE = os.path.join(LOG_DIR, "estimated-load.log")
 LOG_MAX_BYTES = 10 * 1024 * 1024  # 10 MB
 LOG_BACKUP_COUNT = 5  # Keep 5 backup files
 

@@ -1,30 +1,10 @@
 """Background daemon for updating estimated load for all devices."""
 
-import asyncio
-import os
-import yaml
-import cognit_conf as conf
 import db_manager
 from system_metrics import calculate_estimated_load
-from cognit_logger import setup_logging, get_logger
+from cognit_logger import get_logger
 
 logger = get_logger(__name__)
-
-def load_interval() -> int:
-    """Load interval from config file with priority: user_config > DEFAULT > 30."""
-    interval = None
-    if os.path.exists(conf.PATH):
-        try:
-            with open(conf.PATH, 'r') as f:
-                user_config = yaml.safe_load(f) or {}
-                interval = user_config.get('estimated_load_update_interval_seconds')
-        except Exception:
-            pass
-    
-    if interval is None:
-        interval = conf.DEFAULT.get('estimated_load_update_interval_seconds', 30)
-    
-    return interval
 
 def update_all_devices_estimated_load() -> None:
     """Update estimated_load for all devices in database.
@@ -68,35 +48,3 @@ def update_all_devices_estimated_load() -> None:
             failure_count += 1
     
     logger.info(f"Updated estimated_load for {success_count} devices, {failure_count} failures")
-
-
-async def daemon_loop() -> None:
-    """Main daemon loop that runs periodically.
-
-    It is called in the lifespan context manager of fastapi app in main.py
-    
-    Checks configuration each iteration to support dynamic interval changes.
-    Handles errors gracefully without stopping the daemon.
-    """
-    logger.info("Estimated load daemon started")
-    
-    while True:
-        try:
-            interval = load_interval()
-            logger.info(f"Daemon loop frequency: {interval} seconds")
-            update_all_devices_estimated_load()
-            await asyncio.sleep(interval)
-        except Exception as e:
-            logger.error(f"Error in daemon loop: {e}")
-            await asyncio.sleep(30)
-
-if __name__ == "__main__":
-    # Setup logging when running standalone
-    setup_logging("INFO")
-    interval = load_interval()
-    print("Starting estimated load daemon (press Ctrl+C to stop)...")
-    print(f"Update interval: {interval} seconds")
-    try:
-        asyncio.run(daemon_loop())
-    except KeyboardInterrupt:
-        print("\nDaemon stopped by user")
