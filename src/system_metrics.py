@@ -300,9 +300,9 @@ def get_service_metrics(
     Returns:
         Dict with {"queue_total": int, "sum_cpu_faas_role": float} (latest values, already aggregated)
     """
-    # Get only the latest monitoring point (last 2 minutes to ensure we get at least one sample)
+    # Get only the latest monitoring point
     end_time = datetime.now()
-    start_time = end_time - timedelta(minutes=2)
+    start_time = end_time - timedelta(minutes=30)
     period = Period(slice(start_time, end_time, timedelta(minutes=1)))
 
     results = {"queue_total": 0, "sum_cpu_faas_role": 0}
