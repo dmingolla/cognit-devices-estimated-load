@@ -132,6 +132,53 @@ def has_frontend_role(service: Dict) -> bool:
         return False
 
 
+def extract_flavour_from_service_name(service_name: str) -> str:
+    """Extract flavour from service name and normalize to lowercase.
+    
+    Extracts the flavour by taking the part after the last underscore,
+    or the entire name if no underscore is found.
+    
+    Args:
+        service_name: Service name (e.g., 'ICE_GlobalOptimizer')
+    
+    Returns:
+        Lowercase flavour string (e.g., 'globaloptimizer')
+    """
+    # Split by underscore and take last part, or use entire name
+    if '_' in service_name:
+        flavour = service_name.split('_')[-1]
+    else:
+        flavour = service_name
+    
+    # Return lowercase for case-insensitive comparison
+    return flavour.lower()
+
+
+def calculate_estimated_load_for_service(service_cpu_percent: float, device_count: int) -> float:
+    """Calculate estimated load for a single service.
+    
+    Args:
+        service_cpu_percent: CPU usage percentage for the service (0-100)
+        device_count: Number of devices with the service's flavour
+    
+    Returns:
+        Estimated load in range [0.0, 1.0]
+        - 1.0 if device_count == 0
+        - (service_cpu_percent / 100.0) / device_count otherwise
+        - Capped at 1.0 maximum
+    """
+    if device_count == 0:
+        return 1.0
+    
+    if service_cpu_percent == 0:
+        return 0.0
+    
+    # Normalize CPU from percentage [0-100] to [0-1] and divide by device count
+    estimated_load = (service_cpu_percent / 100.0) / device_count
+    
+    return min(estimated_load, 1.0)
+
+
 def calculate_estimated_load(device_count: int) -> float:
     """Calculate estimated load from system metrics and device count.
     

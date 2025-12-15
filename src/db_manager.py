@@ -229,3 +229,41 @@ class DBManager:
             cursor.execute('SELECT DISTINCT device_id FROM device_cluster_assignment')
             rows = cursor.fetchall()
             return [row[0] for row in rows] if rows else []
+
+    def get_device_count_by_flavour(self, flavour: str) -> int:
+        """Get count of devices with a specific flavour (case-insensitive comparison).
+        
+        Args:
+            flavour: The flavour to search for (will be lowercased for comparison)
+        
+        Returns:
+            Number of devices with the specified flavour
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            # Use LOWER() for case-insensitive comparison
+            cursor.execute(
+                'SELECT COUNT(*) FROM device_cluster_assignment WHERE LOWER(flavour) = LOWER(?)',
+                (flavour,)
+            )
+            result = cursor.fetchone()
+            return result[0] if result else 0
+
+    def get_device_ids_by_flavour(self, flavour: str) -> List[str]:
+        """Get all device_ids with a specific flavour (case-insensitive comparison).
+        
+        Args:
+            flavour: The flavour to search for (will be lowercased for comparison)
+        
+        Returns:
+            List of device_id values with the specified flavour (empty list if none)
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            # Use LOWER() for case-insensitive comparison
+            cursor.execute(
+                'SELECT device_id FROM device_cluster_assignment WHERE LOWER(flavour) = LOWER(?)',
+                (flavour,)
+            )
+            rows = cursor.fetchall()
+            return [row[0] for row in rows] if rows else []
