@@ -3,14 +3,13 @@
 from typing import List, Dict, Any
 import json
 import math
-import os
 from datetime import datetime, timedelta
 from pathlib import Path
 import requests
 from requests.auth import HTTPBasicAuth
 from pyoneai.core import Entity, EntityType, EntityUID, MonitoringConfig
 from pyoneai.core import Float, MetricAttributes, MetricType
-from pyoneai.core.time import Period
+from pyoneai.core.time import Period, Instant
 from pyoneai.core.tsnumpy.io.sql import SQLEngine
 from pyoneai.core.tsnumpy.timeseries import Timeseries
 from pyoneai.core.tsnumpy.index import TimeIndex
@@ -383,8 +382,8 @@ def get_service_metrics(
 def store_cpu_sum_for_service(service_id: int, cpu_sum: float, timestamp: datetime) -> None:
     """Store CPU sum time series for a service using pyoneai SQLEngine.
     
-    Creates/updates a SQLite database file per service with naming convention:
-    oneflow_{service_id}_cpu_forecast_FaaS_Role_monitoring.db
+    Creates/updates a SQLite database file per service: {service_id}.db
+    Table name: service_role_{service_id}_cpu_sum_monitoring
     
     Args:
         service_id: OneFlow service ID
@@ -392,16 +391,16 @@ def store_cpu_sum_for_service(service_id: int, cpu_sum: float, timestamp: dateti
         timestamp: Timestamp for this CPU sum value
     """
     try:
-        # Build DB path: oneflow_{service_id}_cpu_forecast_FaaS_Role_monitoring.db
+        # Build DB path: {service_id}.db
         db_dir = Path(conf.CPU_TIMESERIES_DB_DIR)
         db_dir.mkdir(parents=True, exist_ok=True)
-        db_path = db_dir / f"oneflow_{service_id}_cpu_forecast_FaaS_Role_monitoring.db"
+        db_path = db_dir / f"{service_id}.db"
         
         # Create SQLEngine
         engine = SQLEngine(path=str(db_path), suffix="monitoring")
         
-        # Create EntityUID for the service FaaS role
-        entity_uid = EntityUID(type=EntityType.SERVICE_ROLE, id=f"{service_id}_FaaS")
+        # Create EntityUID for the service (table: service_role_{service_id}_cpu_sum_monitoring)
+        entity_uid = EntityUID(type=EntityType.SERVICE_ROLE, id=str(service_id))
         
         # Create MetricAttributes for cpu_sum
         metric_attrs = MetricAttributes(
@@ -430,3 +429,121 @@ def store_cpu_sum_for_service(service_id: int, cpu_sum: float, timestamp: dateti
         
     except Exception as e:
         logger.warning(f"Warning: Could not store CPU sum for service {service_id}: {e}")
+
+
+def get_cpu_forecast_for_service(service_id: int, horizon_seconds: int = None) -> float | None:
+    """Get CPU forecast for a service by querying with future Period.
+    
+    The SDK automatically predicts when querying a future time period.
+    
+    Args:
+        service_id: OneFlow service ID
+        horizon_seconds: Forecast horizon in seconds (defaults to config value)
+    
+    Returns:
+        Predicted CPU sum (float) or None if forecast cannot be computed
+    """
+    if horizon_seconds is None:
+        horizon_seconds = conf.FORECAST_HORIZON_SECONDS
+    
+    try:
+        db_dir = Path(conf.CPU_TIMESERIES_DB_DIR)
+        db_path = db_dir / f"{service_id}.db"
+        
+        if not db_path.exists():
+            logger.debug(f"CPU timeseries DB not found for service {service_id}, cannot forecast")
+            return None
+        
+        # Create MonitoringConfig for SQLite
+        monitoring_config = MonitoringConfig.opennebula_sqlite(
+            db_path=str(db_path),
+            monitor_interval=conf.ESTIMATED_LOAD_UPDATE_INTERVAL_SECONDS
+        )
+        
+        entity_uid = EntityUID(type=EntityType.SERVICE_ROLE, id=str(service_id))
+        
+        entity = Entity(
+            uid=entity_uid,
+            metrics={
+                "cpu_sum": MetricAttributes(
+                    name="cpu_sum",
+                    type=MetricType.GAUGE,
+                    dtype=Float()
+                )
+            },
+            monitoring=monitoring_config
+        )
+        
+        # Query with future Instant - SDK will automatically predict
+        now = datetime.now()
+        future_time = now + timedelta(seconds=horizon_seconds)
+        future_instant = Instant(future_time)
+        
+        # Get forecast (SDK auto-predicts for future instant)
+        forecast_ts = entity["cpu_sum"][future_instant]
+        
+        if forecast_ts is None or forecast_ts.values.size == 0:
+            logger.debug(f"No forecast data returned for service {service_id}")
+            return None
+        
+        # Get the predicted value
+        forecast_value = forecast_ts.values.flatten()[0]
+        
+        if math.isnan(forecast_value):
+            logger.debug(f"Forecast is NaN for service {service_id}")
+            return None
+        
+        return float(forecast_value)
+        
+    except Exception as e:
+        logger.warning(f"Warning: Could not get CPU forecast for service {service_id}: {e}")
+        return None
+
+
+def store_cpu_forecast_for_service(service_id: int, cpu_forecast: float, timestamp: datetime) -> None:
+    """Store CPU forecast time series for a service using pyoneai SQLEngine.
+    
+    Stores forecast in the same DB file as cpu_sum: {service_id}.db
+    Table name: service_role_{service_id}_cpu_sum_forecast_monitoring
+    
+    Args:
+        service_id: OneFlow service ID
+        cpu_forecast: Predicted CPU sum value
+        timestamp: Timestamp for this forecast (should match the timestamp used for cpu_sum)
+    """
+    try:
+        db_dir = Path(conf.CPU_TIMESERIES_DB_DIR)
+        db_dir.mkdir(parents=True, exist_ok=True)
+        db_path = db_dir / f"{service_id}.db"
+        
+        # Create SQLEngine
+        engine = SQLEngine(path=str(db_path), suffix="monitoring")
+        
+        entity_uid = EntityUID(type=EntityType.SERVICE_ROLE, id=str(service_id))
+        
+        metric_attrs = MetricAttributes(
+            name="cpu_sum_forecast",
+            type=MetricType.GAUGE,
+            dtype=Float()
+        )
+        
+        # Create TimeIndex with single timestamp
+        time_index = TimeIndex(np.array([timestamp], dtype="object"))
+        
+        # Create Timeseries with single data point
+        timeseries = Timeseries(
+            time_idx=time_index,
+            metric_idx=np.array([metric_attrs]),
+            entity_uid_idx=np.array([entity_uid]),
+            data=np.array([[cpu_forecast]]).reshape(1, 1, 1)
+        )
+        
+        engine.insert_data(timeseries)
+        
+        logger.debug(
+            f"Stored CPU forecast {cpu_forecast:.2f}% for service {service_id} "
+            f"at {timestamp.isoformat()} in {db_path.name}"
+        )
+        
+    except Exception as e:
+        logger.warning(f"Warning: Could not store CPU forecast for service {service_id}: {e}")

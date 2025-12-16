@@ -7,7 +7,9 @@ from system_metrics import (
     collect_system_metrics,
     extract_flavour_from_service_name,
     calculate_estimated_load_for_service,
-    store_cpu_sum_for_service
+    store_cpu_sum_for_service,
+    get_cpu_forecast_for_service,
+    store_cpu_forecast_for_service
 )
 from cognit_logger import get_logger
 
@@ -53,12 +55,28 @@ def update_all_devices_estimated_load() -> None:
         queue_total = service["queue_total"]
         faas_vm_count = int(service.get("faas_vm_count", 0) or 0)
         
-        # Store CPU sum for future predictions (only if we have valid CPU data)
+        # Store CPU sum and get/store forecast (only if we have valid CPU data)
+        timestamp = datetime.now()
         if service_cpu_raw is not None and not math.isnan(service_cpu_raw):
             try:
-                store_cpu_sum_for_service(service_id, service_cpu_raw, datetime.now())
+                # Store current CPU sum
+                store_cpu_sum_for_service(service_id, service_cpu_raw, timestamp)
+                
+                # Get forecast for next interval
+                cpu_forecast = get_cpu_forecast_for_service(service_id)
+                
+                if cpu_forecast is not None:
+                    # Store forecast with same timestamp
+                    store_cpu_forecast_for_service(service_id, cpu_forecast, timestamp)
+                    logger.info(
+                        f"Service {service_id} ({service_name}): "
+                        f"CPU actual={service_cpu_raw:.2f}%, forecast={cpu_forecast:.2f}%"
+                    )
+                else:
+                    logger.debug(f"Service {service_id}: No forecast available yet (insufficient history)")
+                    
             except Exception as e:
-                logger.warning(f"Failed to store CPU sum for service {service_id}: {e}")
+                logger.warning(f"Failed to store/get CPU forecast for service {service_id}: {e}")
         
         # Extract flavour from service name (lowercase for case-insensitive matching)
         flavour = extract_flavour_from_service_name(service_name)
