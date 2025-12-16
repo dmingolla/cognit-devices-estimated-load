@@ -300,9 +300,9 @@ def get_service_metrics(
     Returns:
         Dict with {"queue_total": int, "sum_cpu_faas_role": float} (latest values, already aggregated)
     """
-    # Get only the latest monitoring point
+    # Get only the latest monitoring point (use shorter period to avoid array dimension mismatches)
     end_time = datetime.now()
-    start_time = end_time - timedelta(minutes=30)
+    start_time = end_time - timedelta(minutes=5)
     period = Period(slice(start_time, end_time, timedelta(minutes=1)))
 
     results = {"queue_total": 0, "sum_cpu_faas_role": 0}
@@ -352,6 +352,7 @@ def get_service_metrics(
 
         cpu_data = faas_role["cpu"][period]
         if cpu_data is not None and cpu_data.values.size > 0:
+            logger.info(f"For service {service_id} ({service_name}): CPU data shape: {cpu_data.values.shape}, values: {cpu_data.values.flatten()}")
             # Get the LATEST (last) sum of CPU across all FaaS VMs
             latest_cpu = cpu_data.values.flatten()[-1]
             if not math.isnan(latest_cpu):
