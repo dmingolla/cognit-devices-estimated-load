@@ -25,6 +25,9 @@ DEFAULT = {
     'one_api_password': '',  # Must be set in config.yaml
     # Daemon configuration
     'estimated_load_update_interval_seconds': 30,
+    # CPU time series storage
+    'cpu_timeseries_db_dir': '/root/oneflow_cpu_forecast_databases/',
+    'forecast_horizon_seconds': 60,
 }
 
 FALLBACK_MSG = 'Using default configuration'
@@ -80,6 +83,10 @@ ONE_API_PASSWORD = config['one_api_password']
 
 # Daemon configuration
 ESTIMATED_LOAD_UPDATE_INTERVAL_SECONDS = config['estimated_load_update_interval_seconds']
+
+# CPU time series storage
+CPU_TIMESERIES_DB_DIR = config['cpu_timeseries_db_dir']
+FORECAST_HORIZON_SECONDS = config['forecast_horizon_seconds']
 
 # Database configuration dictionary for one-aiops SDK
 DB_CONFIG = {

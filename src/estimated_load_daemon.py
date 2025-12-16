@@ -1,10 +1,13 @@
 """Background daemon for updating estimated load for all devices."""
 
+import math
+from datetime import datetime
 import db_manager
 from system_metrics import (
     collect_system_metrics,
     extract_flavour_from_service_name,
-    calculate_estimated_load_for_service
+    calculate_estimated_load_for_service,
+    store_cpu_sum_for_service
 )
 from cognit_logger import get_logger
 
@@ -45,9 +48,17 @@ def update_all_devices_estimated_load() -> None:
     for service in service_metrics:
         service_id = service["service_id"]
         service_name = service["service_name"]
-        service_cpu = service["sum_cpu_faas_role"] or 0.0
+        service_cpu_raw = service.get("sum_cpu_faas_role")
+        service_cpu = service_cpu_raw if service_cpu_raw is not None else 0.0
         queue_total = service["queue_total"]
         faas_vm_count = int(service.get("faas_vm_count", 0) or 0)
+        
+        # Store CPU sum for future predictions (only if we have valid CPU data)
+        if service_cpu_raw is not None and not math.isnan(service_cpu_raw):
+            try:
+                store_cpu_sum_for_service(service_id, service_cpu_raw, datetime.now())
+            except Exception as e:
+                logger.warning(f"Failed to store CPU sum for service {service_id}: {e}")
         
         # Extract flavour from service name (lowercase for case-insensitive matching)
         flavour = extract_flavour_from_service_name(service_name)

@@ -3,12 +3,18 @@
 from typing import List, Dict, Any
 import json
 import math
+import os
 from datetime import datetime, timedelta
+from pathlib import Path
 import requests
 from requests.auth import HTTPBasicAuth
 from pyoneai.core import Entity, EntityType, EntityUID, MonitoringConfig
 from pyoneai.core import Float, MetricAttributes, MetricType
 from pyoneai.core.time import Period
+from pyoneai.core.tsnumpy.io.sql import SQLEngine
+from pyoneai.core.tsnumpy.timeseries import Timeseries
+from pyoneai.core.tsnumpy.index import TimeIndex
+import numpy as np
 import cognit_conf as conf
 from cognit_logger import get_logger
 
@@ -372,3 +378,55 @@ def get_service_metrics(
         logger.warning(f"Warning: Could not fetch sum_cpu_faas_role for service {service_id}: {e}")
 
     return results
+
+
+def store_cpu_sum_for_service(service_id: int, cpu_sum: float, timestamp: datetime) -> None:
+    """Store CPU sum time series for a service using pyoneai SQLEngine.
+    
+    Creates/updates a SQLite database file per service with naming convention:
+    oneflow_{service_id}_cpu_forecast_FaaS_Role_monitoring.db
+    
+    Args:
+        service_id: OneFlow service ID
+        cpu_sum: Sum of CPU usage across all FaaS VMs in the service
+        timestamp: Timestamp for this CPU sum value
+    """
+    try:
+        # Build DB path: oneflow_{service_id}_cpu_forecast_FaaS_Role_monitoring.db
+        db_dir = Path(conf.CPU_TIMESERIES_DB_DIR)
+        db_dir.mkdir(parents=True, exist_ok=True)
+        db_path = db_dir / f"oneflow_{service_id}_cpu_forecast_FaaS_Role_monitoring.db"
+        
+        # Create SQLEngine
+        engine = SQLEngine(path=str(db_path), suffix="monitoring")
+        
+        # Create EntityUID for the service FaaS role
+        entity_uid = EntityUID(type=EntityType.SERVICE_ROLE, id=f"{service_id}_FaaS")
+        
+        # Create MetricAttributes for cpu_sum
+        metric_attrs = MetricAttributes(
+            name="cpu_sum",
+            type=MetricType.GAUGE,
+            dtype=Float()
+        )
+        
+        # Create TimeIndex with single timestamp
+        time_index = TimeIndex(np.array([timestamp], dtype="object"))
+        
+        # Create Timeseries with single data point
+        timeseries = Timeseries(
+            time_idx=time_index,
+            metric_idx=np.array([metric_attrs]),
+            entity_uid_idx=np.array([entity_uid]),
+            data=np.array([[cpu_sum]]).reshape(1, 1, 1)
+        )
+        
+        engine.insert_data(timeseries)
+        
+        logger.debug(
+            f"Stored CPU sum {cpu_sum:.2f}% for service {service_id} "
+            f"at {timestamp.isoformat()} in {db_path.name}"
+        )
+        
+    except Exception as e:
+        logger.warning(f"Warning: Could not store CPU sum for service {service_id}: {e}")
