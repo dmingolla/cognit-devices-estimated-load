@@ -432,9 +432,9 @@ def store_cpu_sum_for_service(service_id: int, cpu_sum: float, timestamp: dateti
 
 
 def get_cpu_forecast_for_service(service_id: int, horizon_seconds: int = None) -> float | None:
-    """Get CPU forecast for a service by querying with future Period.
+    """Get CPU forecast for a service by querying with future Instant.
     
-    The SDK automatically predicts when querying a future time period.
+    The SDK automatically predicts when querying a future time.
     
     Args:
         service_id: OneFlow service ID
@@ -482,18 +482,28 @@ def get_cpu_forecast_for_service(service_id: int, horizon_seconds: int = None) -
         # Get forecast (SDK auto-predicts for future instant)
         forecast_ts = entity["cpu_sum"][future_instant]
         
-        if forecast_ts is None or forecast_ts.values.size == 0:
+        if forecast_ts is None:
             logger.debug(f"No forecast data returned for service {service_id}")
             return None
         
-        # Get the predicted value
-        forecast_value = forecast_ts.values.flatten()[0]
+        # Get the predicted value - handle both scalar (0-dim) and array cases
+        forecast_array = np.asarray(forecast_ts.values)
+        
+        if forecast_array.size == 0:
+            logger.debug(f"Empty forecast array for service {service_id}")
+            return None
+        
+        # Handle scalar (0-dim), 1-dim, or multi-dim arrays
+        if forecast_array.ndim == 0:
+            forecast_value = float(forecast_array)
+        else:
+            forecast_value = float(forecast_array.flat[0])
         
         if math.isnan(forecast_value):
             logger.debug(f"Forecast is NaN for service {service_id}")
             return None
         
-        return float(forecast_value)
+        return forecast_value
         
     except Exception as e:
         logger.warning(f"Warning: Could not get CPU forecast for service {service_id}: {e}")
