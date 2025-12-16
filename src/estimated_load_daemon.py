@@ -47,11 +47,11 @@ def update_all_devices_estimated_load() -> None:
         service_name = service["service_name"]
         service_cpu = service["sum_cpu_faas_role"] or 0.0
         queue_total = service["queue_total"]
+        faas_vm_count = int(service.get("faas_vm_count", 0) or 0)
         
         # Extract flavour from service name (lowercase for case-insensitive matching)
         flavour = extract_flavour_from_service_name(service_name)
         
-        # Get devices with this flavour
         device_ids = db.get_device_ids_by_flavour(flavour)
         device_count = len(device_ids)
         
@@ -67,10 +67,12 @@ def update_all_devices_estimated_load() -> None:
                 f"queue_total={queue_total} > 0, setting estimated_load=1.0"
             )
         else:
-            estimated_load = calculate_estimated_load_for_service(service_cpu, device_count)
+            denom = faas_vm_count if faas_vm_count > 0 else device_count
+            estimated_load = calculate_estimated_load_for_service(service_cpu, denom)
             logger.info(
                 f"Service {service_id} ({service_name}): "
-                f"device_count={device_count}, service_cpu={service_cpu:.2f}%, "
+                f"faas_vm_count={faas_vm_count}, "
+                f"service_cpu={service_cpu:.2f}%, "
                 f"estimated_load={estimated_load:.4f} per device"
             )
         

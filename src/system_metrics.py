@@ -39,9 +39,12 @@ def collect_system_metrics() -> List[Dict[str, Any]]:
     """Collect metrics for each OneFlow service with Frontend role.
     
     Returns:
-        List of dicts: [{"service_id": int, "service_name": str, "queue_total": int, "sum_cpu_faas_role": float}]
+        List of dicts: [{"service_id": int, "service_name": str, "queue_total": int, "sum_cpu_faas_role": float,
+                         "faas_vm_count": int, "frontend_vm_count": int}]
         - queue_total: Latest sum across Frontend VMs (SDK aggregates at role level)
         - sum_cpu_faas_role: Latest average across FaaS VMs (SDK aggregates at role level)
+        - faas_vm_count: Number of VMs in the FaaS role for the service (from OneFlow service template)
+        - frontend_vm_count: Number of VMs in the Frontend role for the service (from OneFlow service template)
     """
     all_services = get_oneflow_services()
 
@@ -93,6 +96,8 @@ def collect_system_metrics() -> List[Dict[str, Any]]:
                 "service_name": service_name,
                 "frontend_vms": frontend_vms,
                 "faas_vms": faas_vms,
+                "frontend_vm_count": len(frontend_vms),
+                "faas_vm_count": len(faas_vms),
             })
 
         # Build service topology and create monitoring config
@@ -112,6 +117,8 @@ def collect_system_metrics() -> List[Dict[str, Any]]:
                 "service_name": service_name,
                 "queue_total": metrics["queue_total"],
                 "sum_cpu_faas_role": metrics["sum_cpu_faas_role"],
+                "frontend_vm_count": int(service_data.get("frontend_vm_count", 0) or 0),
+                "faas_vm_count": int(service_data.get("faas_vm_count", 0) or 0),
             })
 
     except Exception as e:
