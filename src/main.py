@@ -24,7 +24,7 @@ def main() -> int:
     args = parser.parse_args()
     
     if args.daemon:
-        interval = args.interval
+        interval = args.interval or conf.ESTIMATED_LOAD_UPDATE_INTERVAL_SECONDS
         logger.info(f"Starting daemon mode (interval: {interval}s, press Ctrl+C to stop)")
         try:
             while True:
