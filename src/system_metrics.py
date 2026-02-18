@@ -28,7 +28,7 @@ MAX_STORAGE_GAP_SECONDS = 90
 
 def get_next_storage_timestamp(service_id: int) -> datetime:
     """Return next timestamp for storing CPU sum: last + interval, or now() if no last or gap too large.
-    Keeps a regular time grid to avoid NaN when the SDK loads the series for forecasting.
+    Keeps a strict regular time grid (rows differ by exactly interval_seconds) so the SDK sees no NaN.
     """
     now = datetime.now()
     interval = getattr(conf, "ESTIMATED_LOAD_UPDATE_INTERVAL_SECONDS", 30)
@@ -39,8 +39,8 @@ def get_next_storage_timestamp(service_id: int) -> datetime:
     if gap > MAX_STORAGE_GAP_SECONDS:
         return now  # re-sync after crash or long gap
     next_ts = last + timedelta(seconds=interval)
-    if next_ts > now:
-        return now  # e.g. clock skew
+    # Always use next_ts when within the gap window so consecutive rows differ by exactly interval
+    # (next_ts can be slightly in the future if the daemon ran early)
     return next_ts
 
 
