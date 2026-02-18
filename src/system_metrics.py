@@ -486,18 +486,21 @@ def get_cpu_forecast_for_service(service_id: int, horizon_seconds: int = None) -
             logger.debug(f"No forecast data returned for service {service_id}")
             return None
         
-        # Get the predicted value - handle both scalar (0-dim) and array cases
-        forecast_array = np.asarray(forecast_ts.values)
+        # Get the predicted value - handle scalar, 0-dim array, or multi-dim (SDK may return any)
+        raw = forecast_ts.values
+        if hasattr(raw, "ndim"):
+            forecast_array = np.asarray(raw)
+        else:
+            forecast_array = np.asarray([raw])
         
         if forecast_array.size == 0:
             logger.debug(f"Empty forecast array for service {service_id}")
             return None
         
-        # Handle scalar (0-dim), 1-dim, or multi-dim arrays
         if forecast_array.ndim == 0:
             forecast_value = float(forecast_array)
         else:
-            forecast_value = float(forecast_array.flat[0])
+            forecast_value = float(np.atleast_1d(forecast_array).flat[0])
         
         if math.isnan(forecast_value):
             logger.debug(f"Forecast is NaN for service {service_id}")
