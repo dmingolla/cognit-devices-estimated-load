@@ -7,6 +7,7 @@ from system_metrics import (
     collect_system_metrics,
     extract_flavour_from_service_name,
     calculate_estimated_load_for_service,
+    get_next_storage_timestamp,
     store_cpu_sum_for_service,
     get_cpu_forecast_for_service,
     store_cpu_forecast_for_service
@@ -56,10 +57,10 @@ def update_all_devices_estimated_load() -> None:
         faas_vm_count = int(service.get("faas_vm_count", 0) or 0)
         
         # Store CPU sum and get/store forecast (only if we have valid CPU data)
-        timestamp = datetime.now()
         if service_cpu_raw is not None and not math.isnan(service_cpu_raw):
             try:
-                # Store current CPU sum
+                # Use regular grid (last + interval) so SDK forecast gets no NaN; re-sync to now() after crash/long gap
+                timestamp = get_next_storage_timestamp(service_id)
                 store_cpu_sum_for_service(service_id, service_cpu_raw, timestamp)
                 
                 # Get forecast for next interval

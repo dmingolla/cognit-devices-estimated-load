@@ -19,6 +19,30 @@ from cognit_logger import get_logger
 
 logger = get_logger(__name__)
 
+# Per-service last stored timestamp for CPU sum (regular grid: last + interval).
+# After process crash/reboot this is empty, so we use now() and re-sync.
+_last_cpu_sum_time_per_service: Dict[int, datetime] = {}
+# Max gap (seconds): if time since last store > this, use now() to re-sync (e.g. after long downtime).
+MAX_STORAGE_GAP_SECONDS = 90
+
+
+def get_next_storage_timestamp(service_id: int) -> datetime:
+    """Return next timestamp for storing CPU sum: last + interval, or now() if no last or gap too large.
+    Keeps a regular time grid to avoid NaN when the SDK loads the series for forecasting.
+    """
+    now = datetime.now()
+    interval = getattr(conf, "ESTIMATED_LOAD_UPDATE_INTERVAL_SECONDS", 30)
+    if service_id not in _last_cpu_sum_time_per_service:
+        return now
+    last = _last_cpu_sum_time_per_service[service_id]
+    gap = (now - last).total_seconds()
+    if gap > MAX_STORAGE_GAP_SECONDS:
+        return now  # re-sync after crash or long gap
+    next_ts = last + timedelta(seconds=interval)
+    if next_ts > now:
+        return now  # e.g. clock skew
+    return next_ts
+
 
 def get_oneflow_services() -> List[Dict[str, Any]]:
     """Get all OneFlow services via REST API."""
@@ -421,7 +445,7 @@ def store_cpu_sum_for_service(service_id: int, cpu_sum: float, timestamp: dateti
         )
         
         engine.insert_data(timeseries)
-        
+        _last_cpu_sum_time_per_service[service_id] = timestamp
         logger.debug(
             f"Stored CPU sum {cpu_sum:.2f}% for service {service_id} "
             f"at {timestamp.isoformat()} in {db_path.name}"
